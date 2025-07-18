@@ -4,6 +4,9 @@ const socketIo = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
+// Port configuration
+const PORT = process.env.PORT || 3000;
+
 // Load type data once at server start
 const typeData = require('./data/types.json');
 const pokemonTypes = require('./data/pokemon-types.json');
@@ -16,26 +19,26 @@ const io = socketIo(server);
 const sessions = new Map();
 
 // Middleware
-app.use(express.static('public'));
+app.use(express.static(__dirname));
 app.use(express.json());
 
 // Routes
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/create', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'create.html'));
+    res.sendFile(path.join(__dirname, 'create.html'));
 });
 
 app.get('/join', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'join.html'));
+    res.sendFile(path.join(__dirname, 'join.html'));
 });
 
 app.get('/session/:id', (req, res) => {
     const sessionId = req.params.id;
     if (sessions.has(sessionId)) {
-        res.sendFile(path.join(__dirname, 'public', 'session.html'));
+        res.sendFile(path.join(__dirname, 'session.html'));
     } else {
         res.status(404).send('Session not found');
     }
@@ -349,7 +352,6 @@ function checkAutoReveal() {
 // Check every minute for auto-reveals
 setInterval(checkAutoReveal, 60000);
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Open http://localhost:${PORT} to access the app`);
