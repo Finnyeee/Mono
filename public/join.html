@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Session - Monotype Conquest BO3 Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Join Existing Session</h1>
+            <a href="/" class="back-link">← Back to Home</a>
+        </header>
+
+        <div class="main-content">
+            <div class="form-card">
+                <h2>Enter Session ID</h2>
+                <p>Enter the session ID provided by the session creator to join.</p>
+                
+                <div class="input-group">
+                    <label for="sessionIdInput">Session ID:</label>
+                    <input 
+                        type="text" 
+                        id="sessionIdInput" 
+                        placeholder="Enter session ID (e.g., ABC123DE)"
+                        maxlength="8"
+                        autocomplete="off"
+                    >
+                </div>
+                
+                <button id="joinBtn" class="btn primary large">Join Session</button>
+                
+                <div id="error" class="error-message hidden"></div>
+                <div id="loading" class="loading hidden">
+                    <p>Joining session...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sessionIdInput = document.getElementById('sessionIdInput');
+        const joinBtn = document.getElementById('joinBtn');
+        const errorDiv = document.getElementById('error');
+        const loading = document.getElementById('loading');
+
+        // Auto-uppercase input
+        sessionIdInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Handle enter key
+        sessionIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinSession();
+            }
+        });
+
+        joinBtn.addEventListener('click', joinSession);
+
+        async function joinSession() {
+            const sessionId = sessionIdInput.value.trim();
+            
+            if (!sessionId) {
+                showError('Please enter a session ID');
+                return;
+            }
+
+            if (sessionId.length !== 8) {
+                showError('Session ID must be 8 characters long');
+                return;
+            }
+
+            hideError();
+            joinBtn.style.display = 'none';
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/join-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ sessionId }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.location.href = `/session/${sessionId}`;
+                } else {
+                    throw new Error(data.message || 'Session not found');
+                }
+            } catch (error) {
+                loading.classList.add('hidden');
+                joinBtn.style.display = 'block';
+                showError(error.message || 'Error joining session. Please check the session ID and try again.');
+            }
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorDiv.classList.add('hidden');
+        }
+    </script>
+</body>
+</html> 

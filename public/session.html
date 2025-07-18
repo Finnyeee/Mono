@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session - Monotype Conquest BO3 Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Monotype Conquest BO3 Manager</h1>
+            <div class="session-header">
+                <div class="session-info">
+                    <span>Session ID: <strong id="sessionId"></strong></span>
+                    <button id="copySessionId" class="btn-small">Copy ID</button>
+                </div>
+                <div class="user-info">
+                    <span id="userRole"></span>
+                    <span id="connectionStatus" class="status connected">Connected</span>
+                </div>
+            </div>
+            <a href="/" class="back-link">← Leave Session</a>
+        </header>
+
+        <div class="main-content">
+            <div class="session-panel">
+                <!-- Waiting Phase -->
+                <div id="waitingPhase" class="phase-section">
+                    <h2>Waiting for Player</h2>
+                    <p>Waiting for both players to join the session...</p>
+                    <div class="session-users">
+                        <div class="user-item">
+                            <span id="creatorStatus">Creator: <em>Not connected</em></span>
+                        </div>
+                        <div class="user-item">
+                            <span id="joinerStatus">Joiner: <em>Not connected</em></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team Input Phase -->
+                <div id="teamInputPhase" class="phase-section hidden">
+                    <h2>Enter Your 3 Teams</h2>
+                    <p>Please paste your Pokémon Showdown team exports here. The types of your teams will be automatically labeled. Both players must submit before proceeding to the ban phase. Your opponent will only be able to see the types of your teams, not the actual team compositions.</p>
+                    <p class="input-hint"><strong>Tip:</strong> Use Ctrl+Enter to quick submit, or click the Submit button below.</p>
+                    
+                    <div class="team-input-form">
+                        <div class="input-group">
+                            <label for="team1">Team 1:</label>
+                            <textarea id="team1" placeholder="Paste your Pokémon Showdown team export here (e.g., Amoonguss @ Rocky Helmet...)" rows="3" maxlength="5000"></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label for="team2">Team 2:</label>
+                            <textarea id="team2" placeholder="Paste your Pokémon Showdown team export here (e.g., Amoonguss @ Rocky Helmet...)" rows="3" maxlength="5000"></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label for="team3">Team 3:</label>
+                            <textarea id="team3" placeholder="Paste your Pokémon Showdown team export here (e.g., Amoonguss @ Rocky Helmet...)" rows="3" maxlength="5000"></textarea>
+                        </div>
+                        <button id="submitTeamsBtn" class="btn primary large">Submit Teams</button>
+                    </div>
+
+                    <div id="teamSubmissionStatus" class="status-section">
+                        <p><span id="yourTeamsStatus">Your teams: Not submitted</span></p>
+                        <p><span id="opponentTeamsStatus">Opponent teams: Not submitted</span></p>
+                    </div>
+                </div>
+
+                <!-- Banning Phase -->
+                <div id="banningPhase" class="phase-section hidden">
+                    <h2>Ban Phase</h2>
+                    <p>Choose one team from your opponent to ban by clicking the "Ban This Team" button. You can only see opponent teams' types (team compositions are hidden). Your choice will be hidden until both players have made their selection, then results will be revealed simultaneously for fairness.</p>
+                    
+                    <div class="ban-section">
+                        <div class="teams-column">
+                            <h3>Your Teams <span class="info-text">(click to view team composition)</span></h3>
+                            <div id="yourTeamsList" class="teams-display"></div>
+                        </div>
+                        
+                        <div class="teams-column">
+                            <h3>Opponent's Teams <span class="info-text">(types only)</span></h3>
+                            <div id="opponentTeamsList" class="teams-display"></div>
+                        </div>
+                    </div>
+
+                    <div id="banStatus" class="status-section">
+                        <p><span id="yourBanStatus">Your ban: Not selected</span></p>
+                        <p><span id="opponentBanStatus">Opponent ban: Not selected</span></p>
+                    </div>
+                </div>
+
+                <!-- Completed Phase -->
+                <div id="completedPhase" class="phase-section hidden">
+                    <h2>Draft Complete!</h2>
+                    <p>Both teams have been finalized after bans.</p>
+                    
+                    <div id="revealCountdown" class="reveal-countdown">
+                        <h3>🔒 Anti-Cheat Protection</h3>
+                        <p>Opponent team compositions will be automatically revealed in:</p>
+                        <div class="countdown-display">
+                            <span id="countdownTimer">Loading...</span>
+                        </div>
+                        <p class="countdown-note">You'll be able to see your opponent's team compositions after the countdown.</p>
+                    </div>
+                    
+                    <div class="final-results">
+                        <div class="teams-column">
+                            <h3>Your Final Teams <span class="info-text">(click to view team composition)</span></h3>
+                            <div id="yourFinalTeams" class="teams-display"></div>
+                        </div>
+                        
+                        <div class="teams-column">
+                            <h3>Opponent's Final Teams <span class="info-text">(types only)</span></h3>
+                            <div id="opponentFinalTeams" class="teams-display"></div>
+                        </div>
+                    </div>
+                    
+                    <button onclick="location.href='/'" class="btn secondary">Start New Session</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const sessionId = window.location.pathname.split('/').pop();
+        
+        // DOM elements
+        const sessionIdSpan = document.getElementById('sessionId');
+        const copySessionIdBtn = document.getElementById('copySessionId');
+        const userRoleSpan = document.getElementById('userRole');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const creatorStatus = document.getElementById('creatorStatus');
+        const joinerStatus = document.getElementById('joinerStatus');
+
+        // Phase elements
+        const waitingPhase = document.getElementById('waitingPhase');
+        const teamInputPhase = document.getElementById('teamInputPhase');
+        const banningPhase = document.getElementById('banningPhase');
+        const completedPhase = document.getElementById('completedPhase');
+
+        // Team input elements
+        const team1Input = document.getElementById('team1');
+        const team2Input = document.getElementById('team2');
+        const team3Input = document.getElementById('team3');
+        const team1Count = document.getElementById('team1Count');
+        const team2Count = document.getElementById('team2Count');
+        const team3Count = document.getElementById('team3Count');
+        const submitTeamsBtn = document.getElementById('submitTeamsBtn');
+        const yourTeamsStatus = document.getElementById('yourTeamsStatus');
+        const opponentTeamsStatus = document.getElementById('opponentTeamsStatus');
+
+        // Ban phase elements
+        const yourTeamsList = document.getElementById('yourTeamsList');
+        const opponentTeamsList = document.getElementById('opponentTeamsList');
+        const yourBanStatus = document.getElementById('yourBanStatus');
+        const opponentBanStatus = document.getElementById('opponentBanStatus');
+
+        // Final results elements
+        const yourFinalTeams = document.getElementById('yourFinalTeams');
+        const opponentFinalTeams = document.getElementById('opponentFinalTeams');
+
+        // Countdown elements
+        const revealCountdown = document.getElementById('revealCountdown');
+        const countdownTimer = document.getElementById('countdownTimer');
+
+        let currentSession = null;
+        let userRole = null;
+        let countdownInterval = null;
+
+        // Initialize
+        sessionIdSpan.textContent = sessionId;
+
+        // Socket event listeners
+        socket.on('connect', () => {
+            connectionStatus.textContent = 'Connected';
+            connectionStatus.className = 'status connected';
+            socket.emit('join-session', sessionId);
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'status disconnected';
+        });
+
+        socket.on('role-assigned', (role) => {
+            userRole = role;
+            userRoleSpan.textContent = `Role: ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+        });
+
+        socket.on('session-update', (session) => {
+            const wasInBanningPhase = currentSession && currentSession.phase === 'banning';
+            const nowInCompletedPhase = session.phase === 'completed';
+            const wasContentHidden = currentSession && !currentSession.contentRevealed;
+            const nowContentRevealed = session.contentRevealed;
+            const oldPhase = currentSession ? currentSession.phase : null;
+            
+            console.log('Session update received:', {
+                oldPhase: oldPhase,
+                newPhase: session.phase,
+                buttonText: submitTeamsBtn.textContent,
+                creatorTeams: session.creatorTeams ? session.creatorTeams.length : 0,
+                joinerTeams: session.joinerTeams ? session.joinerTeams.length : 0
+            });
+
+            // Update current session
+            currentSession = session;
+
+            // First update team submission status if teams have changed
+            if (session.phase === 'team_input' || 
+                (oldPhase === 'team_input' && session.phase === 'banning')) {
+                updateTeamInputStatus();
+                
+                // Add a small delay before transitioning to banning phase
+                // to allow the UI to update the submission status first
+                if (oldPhase === 'team_input' && session.phase === 'banning') {
+                    setTimeout(() => {
+                        teamInputPhase.classList.add('hidden');
+                        banningPhase.classList.remove('hidden');
+                        updateBanningPhase();
+                    }, 500);
+                    return;
+                }
+            }
+            
+            // Then handle phase transitions
+            if (oldPhase !== 'banning' && session.phase === 'banning') {
+                console.log('Forcing banning phase UI refresh');
+                teamInputPhase.classList.add('hidden');
+                banningPhase.classList.remove('hidden');
+                updateBanningPhase();
+            } else {
+                updatePhaseDisplay();
+            }
+            
+            updateUserStatus();
+            
+            // Show reveal effects
+            if (wasInBanningPhase && nowInCompletedPhase) {
+                showBanRevealEffect();
+            }
+            
+            if (wasContentHidden && nowContentRevealed) {
+                showContentRevealEffect();
+            }
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            alert('Connection error. Please refresh the page and try again.');
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'status disconnected';
+        });
+
+        socket.on('user-joined', (data) => {
+            console.log('User joined:', data.userId);
+            // Update will be handled by session-update event
+        });
+
+        socket.on('user-left', (data) => {
+            console.log('User left:', data.userId);
+            // Update will be handled by session-update event
+        });
+
+        // Event listeners
+        copySessionIdBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(sessionId).then(() => {
+                copySessionIdBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copySessionIdBtn.textContent = 'Copy ID';
+                }, 2000);
+            });
+        });
+
+        // Team input event listeners
+        submitTeamsBtn.addEventListener('click', submitTeams);
+        
+        // Character counting for textareas
+        team1Input.addEventListener('input', () => updateCharCount(team1Input, team1Count));
+        team2Input.addEventListener('input', () => updateCharCount(team2Input, team2Count));
+        team3Input.addEventListener('input', () => updateCharCount(team3Input, team3Count));
+        
+        // Ctrl+Enter to submit (since Enter now creates new lines in textarea)
+        [team1Input, team2Input, team3Input].forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    submitTeams();
+                }
+            });
+        });
+
+        // Functions
+        function updateCharCount(textarea, countElement) {
+            const currentLength = textarea.value.length;
+            countElement.textContent = currentLength;
+            
+            // Update color based on length (for 5000 char limit)
+            if (currentLength > 4500) {
+                countElement.style.color = '#dc2626'; // Red at 90%
+            } else if (currentLength > 3500) {
+                countElement.style.color = '#f59e0b'; // Yellow at 70%
+            } else {
+                countElement.style.color = '#6b7280'; // Gray default
+            }
+        }
+
+        function submitTeams() {
+            // Check if already submitted or not in correct phase
+            if (!currentSession || currentSession.phase !== 'team_input') {
+                alert('Cannot submit teams at this time. Current phase: ' + (currentSession ? currentSession.phase : 'unknown'));
+                return;
+            }
+            
+            // Check if already submitted
+            const isCreator = userRole === 'creator';
+            const yourTeams = isCreator ? currentSession.creatorTeams : currentSession.joinerTeams;
+            if (yourTeams && yourTeams.length > 0) {
+                alert('You have already submitted your teams!');
+                return;
+            }
+            
+            const teams = [
+                team1Input.value.trim(),
+                team2Input.value.trim(),
+                team3Input.value.trim()
+            ];
+
+            // Validate all teams are entered
+            if (teams.some(team => !team)) {
+                alert('Please enter pastes for all 3 teams');
+                return;
+            }
+
+            // Check minimum length
+            const shortTeams = teams.filter(team => team.length < 10);
+            if (shortTeams.length > 0) {
+                alert(`Team descriptions are too short. Each team needs at least 10 characters. Current lengths: Team 1: ${teams[0].length}, Team 2: ${teams[1].length}, Team 3: ${teams[2].length}`);
+                return;
+            }
+
+            // Check maximum length
+            if (teams.some(team => team.length > 5000)) {
+                alert('You probably submitted too much');
+                return;
+            }
+
+            console.log('Submitting teams:', teams);
+            console.log('Session ID:', sessionId);
+            
+            socket.emit('submit-teams', { sessionId, teams });
+            
+            // Show loading state
+            submitTeamsBtn.textContent = 'Submitting...';
+            submitTeamsBtn.disabled = true;
+            
+            // Set timeout to reset button if no response
+            const timeoutId = setTimeout(() => {
+                if (submitTeamsBtn.textContent === 'Submitting...' && currentSession && currentSession.phase === 'team_input') {
+                    submitTeamsBtn.textContent = 'Submit Teams';
+                    submitTeamsBtn.disabled = false;
+                    alert('Submission timed out. Please try again.');
+                    console.log('Submission timeout triggered');
+                }
+            }, 5000);
+            
+            // Store timeout ID so we can clear it if submission succeeds
+            submitTeamsBtn.dataset.timeoutId = timeoutId;
+            
+            // Disable inputs after submission
+            [team1Input, team2Input, team3Input].forEach(el => {
+                el.disabled = true;
+            });
+        }
+
+        function banTeam(teamId) {
+            if (!currentSession) return;
+            
+            const isCreator = userRole === 'creator';
+            const opponentTeams = isCreator ? currentSession.joinerTeams : currentSession.creatorTeams;
+            const team = opponentTeams.find(t => t.id === teamId);
+            
+            if (team && confirm(`Are you sure you want to ban the "${team.label}" team? This cannot be undone.`)) {
+                socket.emit('ban-team', { sessionId, teamId });
+                
+                // Immediately update local ban status for better UX
+                if (isCreator) {
+                    currentSession.creatorBan = teamId;
+                } else {
+                    currentSession.joinerBan = teamId;
+                }
+                
+                // Update the display immediately
+                updateBanningPhase();
+            }
+        }
+
+        function updatePhaseDisplay() {
+            if (!currentSession) return;
+
+            // Cleanup previous phase
+            cleanup();
+
+            // Hide all phases first
+            [waitingPhase, teamInputPhase, banningPhase, completedPhase].forEach(phase => {
+                phase.classList.add('hidden');
+            });
+
+            // Show current phase
+            switch (currentSession.phase) {
+                case 'waiting':
+                    waitingPhase.classList.remove('hidden');
+                    break;
+                case 'team_input':
+                    teamInputPhase.classList.remove('hidden');
+                    updateTeamInputStatus();
+                    
+                    // Check if current user already submitted teams
+                    const isCreator = userRole === 'creator';
+                    const yourTeams = isCreator ? currentSession.creatorTeams : currentSession.joinerTeams;
+                    if (yourTeams && yourTeams.length > 0) {
+                        // Re-enable inputs to show they were submitted, but keep them disabled
+                        [team1Input, team2Input, team3Input].forEach(el => {
+                            el.disabled = true;
+                        });
+                    }
+                    break;
+                case 'banning':
+                    banningPhase.classList.remove('hidden');
+                    updateBanningPhase();
+                    break;
+                case 'completed':
+                    completedPhase.classList.remove('hidden');
+                    updateCompletedPhase();
+                    break;
+            }
+        }
+
+        function updateTeamInputStatus() {
+            if (!currentSession) return;
+
+            const isCreator = userRole === 'creator';
+            const yourTeams = isCreator ? (currentSession.creatorTeams || []) : (currentSession.joinerTeams || []);
+            const opponentTeams = isCreator ? (currentSession.joinerTeams || []) : (currentSession.creatorTeams || []);
+
+            console.log('Updating team status:', {
+                yourTeams: yourTeams.length,
+                opponentTeams: opponentTeams.length
+            });
+
+            // Update both status displays regardless of which player submitted
+            yourTeamsStatus.textContent = yourTeams.length > 0 ? 'Your teams: Submitted ✓' : 'Your teams: Not submitted';
+            opponentTeamsStatus.textContent = opponentTeams.length > 0 ? 'Opponent teams: Submitted ✓' : 'Opponent teams: Not submitted';
+            
+            // If teams were submitted successfully, update the form
+            if (yourTeams.length > 0) {
+                submitTeamsBtn.textContent = 'Teams Submitted ✓';
+                submitTeamsBtn.disabled = true;
+                submitTeamsBtn.classList.add('success');
+                
+                // Disable inputs after submission
+                [team1Input, team2Input, team3Input].forEach(el => {
+                    el.disabled = true;
+                });
+            }
+        }
+
+        function updateBanningPhase() {
+            if (!currentSession || currentSession.phase !== 'banning') {
+                console.log('Not updating banning phase - wrong phase:', currentSession ? currentSession.phase : 'no session');
+                return;
+            }
+
+            console.log('Updating banning phase UI:', {
+                userRole,
+                phase: currentSession.phase,
+                creatorTeams: currentSession.creatorTeams ? currentSession.creatorTeams.length : 0,
+                joinerTeams: currentSession.joinerTeams ? currentSession.joinerTeams.length : 0
+            });
+
+            const isCreator = userRole === 'creator';
+            const yourTeams = isCreator ? (currentSession.creatorTeams || []) : (currentSession.joinerTeams || []);
+            const opponentTeams = isCreator ? (currentSession.joinerTeams || []) : (currentSession.creatorTeams || []);
+            const yourBan = isCreator ? currentSession.creatorBan : currentSession.joinerBan;
+            const opponentBan = isCreator ? currentSession.joinerBan : currentSession.creatorBan;
+            const bothBanned = yourBan && opponentBan;
+
+            // Display your teams with collapsible descriptions
+            yourTeamsList.innerHTML = yourTeams.map((team, index) => `
+                <div class="team-item ${team.banned ? 'banned' : ''}">
+                    <div class="team-header">
+                        <span class="team-label">${escapeHtml(team.label)}</span>
+                        ${team.banned ? '<span class="ban-indicator">BANNED BY OPPONENT</span>' : ''}
+                    </div>
+                    <details class="team-spoiler">
+                        <summary>View your submission</summary>
+                        <div class="team-description">${escapeHtml(team.description)}</div>
+                    </details>
+                </div>
+            `).join('');
+
+            // Display opponent teams with ban buttons
+            opponentTeamsList.innerHTML = opponentTeams.map(team => {
+                let actionContent = '';
+                
+                if (team.banned) {
+                    actionContent = '<span class="ban-indicator">BANNED BY YOU</span>';
+                } else if (yourBan && yourBan === team.id && !bothBanned) {
+                    actionContent = '<span class="ban-pending">YOUR CHOICE (HIDDEN)</span>';
+                } else if (!yourBan) {
+                    actionContent = `<button class="btn-small ban-btn" onclick="banTeam('${team.id}')">Ban This Team</button>`;
+                } else if (bothBanned) {
+                    actionContent = '<span class="ban-waiting">WAITING FOR REVEAL</span>';
+                } else {
+                    actionContent = '<span class="ban-waiting">WAITING FOR OPPONENT</span>';
+                }
+
+                return `
+                    <div class="team-item ${team.banned ? 'banned' : ''} ${bothBanned ? 'reveal-pending' : ''}">
+                        <div class="team-content">
+                            <div class="team-header">
+                                <span class="team-label">${escapeHtml(team.label)}</span>
+                            </div>
+                            <div class="team-hidden-note">Team composition hidden</div>
+                        </div>
+                        <div class="team-actions">
+                            ${actionContent}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Update ban status with more detailed information
+            yourBanStatus.textContent = yourBan ? 'Your ban: Selected ✓' : 'Your ban: Not selected';
+            
+            if (bothBanned) {
+                opponentBanStatus.textContent = 'Opponent ban: Selected ✓ - Results will be revealed shortly...';
+            } else if (opponentBan) {
+                opponentBanStatus.textContent = 'Opponent ban: Selected ✓';
+            } else {
+                opponentBanStatus.textContent = 'Opponent ban: Not selected';
+            }
+
+            // Make sure the banning phase is visible
+            if (currentSession.phase === 'banning') {
+                banningPhase.classList.remove('hidden');
+            }
+        }
+
+        function updateCompletedPhase() {
+            const isCreator = userRole === 'creator';
+            const yourTeams = isCreator ? currentSession.creatorTeams : currentSession.joinerTeams;
+            const opponentTeams = isCreator ? currentSession.joinerTeams : currentSession.creatorTeams;
+
+            // Show final teams (non-banned ones)
+            yourFinalTeams.innerHTML = yourTeams.filter(team => !team.banned).map(team => `
+                <div class="team-item final">
+                    <div class="team-header">
+                        <span class="team-label">${escapeHtml(team.label)}</span>
+                    </div>
+                    <details class="team-spoiler">
+                        <summary>View your submission</summary>
+                        <div class="team-description">${escapeHtml(team.description)}</div>
+                    </details>
+                </div>
+            `).join('');
+
+            // Show opponent teams - revealed if time is up or content is revealed
+            if (currentSession.contentRevealed) {
+                opponentFinalTeams.innerHTML = opponentTeams.filter(team => !team.banned).map(team => `
+                    <div class="team-item final revealed">
+                        <div class="team-header">
+                            <span class="team-label">${escapeHtml(team.label)}</span>
+                            <span class="revealed-badge">REVEALED</span>
+                        </div>
+                        <div class="team-description revealed-content">${escapeHtml(team.description)}</div>
+                    </div>
+                `).join('');
+                
+                // Hide countdown if content is revealed
+                revealCountdown.classList.add('hidden');
+            } else {
+                opponentFinalTeams.innerHTML = opponentTeams.filter(team => !team.banned).map(team => `
+                    <div class="team-item final">
+                        <div class="team-header">
+                            <span class="team-label">${escapeHtml(team.label)}</span>
+                        </div>
+                        <div class="team-hidden-note">Opponent's team composition remains hidden</div>
+                    </div>
+                `).join('');
+                
+                // Show countdown and start timer
+                revealCountdown.classList.remove('hidden');
+                startCountdown();
+            }
+        }
+
+        function startCountdown() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+
+            if (!currentSession.revealAt) return;
+
+            countdownInterval = setInterval(() => {
+                const now = new Date();
+                const revealTime = new Date(currentSession.revealAt);
+                const timeLeft = revealTime.getTime() - now.getTime();
+
+                if (timeLeft <= 0) {
+                    countdownTimer.textContent = 'Content should be revealed now!';
+                    clearInterval(countdownInterval);
+                    return;
+                }
+
+                const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+                countdownTimer.innerHTML = `
+                    <span class="time-unit">${hours.toString().padStart(2, '0')}</span>:
+                    <span class="time-unit">${minutes.toString().padStart(2, '0')}</span>:
+                    <span class="time-unit">${seconds.toString().padStart(2, '0')}</span>
+                    <div class="time-labels">
+                        <span>Hours</span>
+                        <span>Minutes</span>
+                        <span>Seconds</span>
+                    </div>
+                `;
+            }, 1000);
+        }
+
+        function updateUserStatus() {
+            if (!currentSession) return;
+
+            creatorStatus.innerHTML = currentSession.creator 
+                ? 'Creator: <strong>Connected</strong>'
+                : 'Creator: <em>Not connected</em>';
+
+            joinerStatus.innerHTML = currentSession.joiner 
+                ? 'Joiner: <strong>Connected</strong>'
+                : 'Joiner: <em>Not connected</em>';
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleTimeString();
+        }
+
+        function showBanRevealEffect() {
+            // Create and show a reveal notification
+            const notification = document.createElement('div');
+            notification.className = 'ban-reveal-notification';
+            notification.innerHTML = `
+                <div class="reveal-content">
+                    <h3>🎭 Bans Revealed!</h3>
+                    <p>Both players have made their choices</p>
+                </div>
+            `;
+            document.body.appendChild(notification);
+
+            // Animate in
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        function showContentRevealEffect() {
+            // Create and show a content reveal notification
+            const notification = document.createElement('div');
+            notification.className = 'ban-reveal-notification content-reveal';
+            notification.innerHTML = `
+                <div class="reveal-content">
+                    <h3>🔓 Content Revealed!</h3>
+                    <p>2 hours have passed - opponent team compositions are now visible</p>
+                </div>
+            `;
+            document.body.appendChild(notification);
+
+            // Animate in
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+
+            // Remove after 4 seconds
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 4000);
+
+            // Clear countdown interval
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+
+        // Cleanup function
+        function cleanup() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', cleanup);
+    </script>
+</body>
+</html> 

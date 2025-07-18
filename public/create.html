@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Session - Monotype Conquest BO3 Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Create New Session</h1>
+            <a href="/" class="back-link">← Back to Home</a>
+        </header>
+
+        <div class="main-content">
+            <div class="form-card">
+                <h2>Session Setup</h2>
+                <p>Click the button below to create a new session. You'll get a unique session ID that your opponent can use to join.</p>
+                
+                <button id="createBtn" class="btn primary large">Create Session</button>
+                
+                <div id="sessionInfo" class="session-info hidden">
+                    <h3>Session Created Successfully!</h3>
+                    <div class="session-id-display">
+                        <label>Session ID:</label>
+                        <span id="sessionId" class="session-id"></span>
+                        <button id="copyBtn" class="btn-small">Copy</button>
+                    </div>
+                    <p>Share this ID with your opponent so they can join your session.</p>
+                    <button id="enterBtn" class="btn primary">Enter Session</button>
+                </div>
+
+                <div id="loading" class="loading hidden">
+                    <p>Creating session...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const createBtn = document.getElementById('createBtn');
+        const sessionInfo = document.getElementById('sessionInfo');
+        const loading = document.getElementById('loading');
+        const sessionIdSpan = document.getElementById('sessionId');
+        const copyBtn = document.getElementById('copyBtn');
+        const enterBtn = document.getElementById('enterBtn');
+
+        let currentSessionId = null;
+
+        createBtn.addEventListener('click', async () => {
+            createBtn.style.display = 'none';
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/create-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentSessionId = data.sessionId;
+                    sessionIdSpan.textContent = data.sessionId;
+                    loading.classList.add('hidden');
+                    sessionInfo.classList.remove('hidden');
+                } else {
+                    throw new Error('Failed to create session');
+                }
+            } catch (error) {
+                loading.classList.add('hidden');
+                alert('Error creating session. Please try again.');
+                createBtn.style.display = 'block';
+            }
+        });
+
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentSessionId).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy';
+                }, 2000);
+            });
+        });
+
+        enterBtn.addEventListener('click', () => {
+            if (currentSessionId) {
+                window.location.href = `/session/${currentSessionId}`;
+            }
+        });
+    </script>
+</body>
+</html> 
